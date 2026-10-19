@@ -1,0 +1,7 @@
+# 统一换行处理，避免 Windows 工作区与仓库内容反复产生 CRLF 差异
+* text=auto
+*.ico binary
+*.png binary
+*.sln text eol=crlf
+*.py text eol=lf
+*.sh text eol=lf

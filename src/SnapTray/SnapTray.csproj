@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <!-- 打开 WinForms 只为 NotifyIcon(ContextMenuStrip) 和 Screen.WorkingArea，不使用任何 WinForms 窗体。 -->
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\SnapTray.ico</ApplicationIcon>
+    <AssemblyName>SnapTray</AssemblyName>
+    <RootNamespace>SnapTray</RootNamespace>
+    <Version>1.0.0</Version>
+    <Description>轻截 — 托盘截图与桌面贴图工具</Description>
+    <!--
+      WFAC010 要求把 DPI 设置从清单搬到 ApplicationHighDpiMode。这条规则只对 WinForms 窗体有意义，
+      本项目是 WPF：PerMonitorV2 必须由 app.manifest 的 dpiAwareness 声明，否则跨屏坐标换算会失效。
+    -->
+    <NoWarn>$(NoWarn);WFAC010</NoWarn>
+    <!-- 单文件/裁剪对 WPF 支持有限，只做常规框架依赖发布，避免反射丢失。 -->
+    <SatelliteResourceLanguages>zh-Hans;en</SatelliteResourceLanguages>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- 图标同时作为 Win32 资源（exe 图标）和资源嵌入，设置窗口可直接引用。 -->
+    <Resource Include="Assets\SnapTray.ico" />
+  </ItemGroup>
+</Project>

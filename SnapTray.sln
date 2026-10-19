@@ -1,0 +1,36 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{FF1ADEB8-7C0D-409D-9CCD-02494CDB8C38}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SnapTray", "src\SnapTray\SnapTray.csproj", "{3410EC08-622E-4EB1-8F8D-90268B58C9B2}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "tests", "tests", "{ECF9C8FE-C685-4EBB-97E8-7B8CF3CEF289}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SnapTray.SmokeTests", "tests\SnapTray.SmokeTests\SnapTray.SmokeTests.csproj", "{2503F2BB-DC9D-4B90-B408-60AA4397AB41}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{3410EC08-622E-4EB1-8F8D-90268B58C9B2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3410EC08-622E-4EB1-8F8D-90268B58C9B2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3410EC08-622E-4EB1-8F8D-90268B58C9B2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3410EC08-622E-4EB1-8F8D-90268B58C9B2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{2503F2BB-DC9D-4B90-B408-60AA4397AB41}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{2503F2BB-DC9D-4B90-B408-60AA4397AB41}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{2503F2BB-DC9D-4B90-B408-60AA4397AB41}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{2503F2BB-DC9D-4B90-B408-60AA4397AB41}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{3410EC08-622E-4EB1-8F8D-90268B58C9B2} = {FF1ADEB8-7C0D-409D-9CCD-02494CDB8C38}
+		{2503F2BB-DC9D-4B90-B408-60AA4397AB41} = {ECF9C8FE-C685-4EBB-97E8-7B8CF3CEF289}
+	EndGlobalSection
+EndGlobal
