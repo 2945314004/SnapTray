@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel;
 using System.Windows;
 using System.Windows.Controls;
@@ -10,8 +11,8 @@ using System.Windows.Threading;
 using SnapTray.Helpers;
 using SnapTray.Models;
 using SnapTray.Services;
-using DrawingRectangle = System.Drawing.Rectangle;
 using DrawingPoint = System.Drawing.Point;
+using DrawingRectangle = System.Drawing.Rectangle;
 
 namespace SnapTray.Views;
 
@@ -29,7 +30,19 @@ public partial class OverlayWindow : Window
     private bool _placing;
     private IntPtr _handle;
 
+    private AnnotationTool _tool = AnnotationTool.None;
+    private Annotation? _draft;
+    private bool _drawing;
+    private List<Point>? _strokePoints;
+    private Point _drawStart;
+    private Color _color = Color.FromRgb(0xF5, 0x22, 0x2D);
+    private TextBox? _textEditor;
+    private Point _textAnchor;
+    private AnnotationSurface? _surface;
+
     public DrawingRectangle MonitorBounds { get; }
+
+    internal IReadOnlyList<Annotation> Annotations => AnnotationLayer.Items;
 
     public OverlayWindow(CaptureSession session, DesktopSnapshot snapshot, DrawingRectangle monitorBounds)
     {
@@ -43,6 +56,7 @@ public partial class OverlayWindow : Window
         SourceInitialized += OnSourceInitialized;
         Loaded += OnLoaded;
         DpiChanged += OnDpiChanged;
+        UpdateColorVisuals();
     }
 
     private void OnSourceInitialized(object? sender, EventArgs e)
@@ -76,14 +90,28 @@ public partial class OverlayWindow : Window
         finally { _placing = false; }
     }
 
-    internal void UpdateSelection(DrawingRectangle selection, bool showToolbar)
+    internal void UpdateSelection(DrawingRectangle selection, bool showToolbar, AnnotationSurface? surface)
     {
+        bool changed = selection != _selection;
         _selection = selection;
         _toolbarVisible = showToolbar;
-        // 直接清字段，避免 ClearHover 再触发一次重绘。
         if (showToolbar) _hoverTarget = null;
+        if (changed)
+        {
+            // 选区变了，之前画在旧选区上的标注全部作废（坐标系已经不同了）。
+            CommitTextInput();
+            AnnotationLayer.Reset();
+            _draft = null;
+            _drawing = false;
+        }
+        _surface = surface;
         Redraw();
     }
+
+    private bool HasSelection => _selection.Width > 0 && _selection.Height > 0;
+
+    /// <summary>标注线宽按显示器缩放换算，保证 150% 屏上看起来和 100% 屏一样粗。</summary>
+    private double StrokeThickness => 3.0 / Math.Max(0.2, AnnotationLayer.Scale);
 
     private void Redraw()
     {
@@ -116,9 +144,10 @@ public partial class OverlayWindow : Window
             Canvas.SetTop(SizeBadge, local.Y >= SizeBadge.DesiredSize.Height + 8 ? local.Y - SizeBadge.DesiredSize.Height - 8 : Math.Min(height - SizeBadge.DesiredSize.Height, local.Y + 8));
         }
 
+        PositionAnnotationLayer(hasIntersection, intersection, local);
         DrawWindowHint(hasIntersection, width, height);
 
-        bool hasSelection = _selection.Width > 0 && _selection.Height > 0;
+        bool hasSelection = HasSelection;
         HintBar.Visibility = hasSelection ? Visibility.Collapsed : Visibility.Visible;
         HintBar.MaxWidth = Math.Max(1, width - 24);
         HintBar.Measure(new Size(HintBar.MaxWidth, height));
@@ -126,19 +155,43 @@ public partial class OverlayWindow : Window
         Canvas.SetTop(HintBar, Math.Min(24, Math.Max(0, height - HintBar.DesiredSize.Height)));
 
         ActionBar.Visibility = _toolbarVisible ? Visibility.Visible : Visibility.Collapsed;
-        if (_toolbarVisible)
+        if (_toolbarVisible) PositionActionBar(hasIntersection, local, width, height);
+    }
+
+    /// <summary>标注画布只覆盖本屏与选区的交集，坐标系仍是整个选区，靠 Offset 平移过来。</summary>
+    private void PositionAnnotationLayer(bool hasIntersection, DrawingRectangle intersection, Rect local)
+    {
+        AnnotationLayer.Surface = _surface;
+        if (!hasIntersection || _surface is null)
         {
-            ActionBar.MaxWidth = Math.Max(1, width - 16);
-            ActionBar.Measure(new Size(ActionBar.MaxWidth, height));
-            double toolbarWidth = ActionBar.DesiredSize.Width;
-            double toolbarHeight = ActionBar.DesiredSize.Height;
-            double x = hasIntersection ? local.Right - toolbarWidth : (width - toolbarWidth) / 2;
-            double y = hasIntersection ? local.Bottom + 12 : (height - toolbarHeight) / 2;
-            if (y + toolbarHeight > height - 8)
-                y = hasIntersection && local.Top >= toolbarHeight + 20 ? local.Top - toolbarHeight - 12 : height - toolbarHeight - 12;
-            Canvas.SetLeft(ActionBar, Math.Clamp(x, 8, Math.Max(8, width - toolbarWidth - 8)));
-            Canvas.SetTop(ActionBar, Math.Clamp(y, 8, Math.Max(8, height - toolbarHeight - 8)));
+            AnnotationLayer.Visibility = Visibility.Collapsed;
+            return;
         }
+        double scale = Surface.ActualWidth / MonitorBounds.Width;
+        if (scale <= 0) { AnnotationLayer.Visibility = Visibility.Collapsed; return; }
+        AnnotationLayer.Visibility = Visibility.Visible;
+        AnnotationLayer.Scale = scale;
+        AnnotationLayer.OffsetX = intersection.X - _selection.X;
+        AnnotationLayer.OffsetY = intersection.Y - _selection.Y;
+        AnnotationLayer.Width = local.Width;
+        AnnotationLayer.Height = local.Height;
+        Canvas.SetLeft(AnnotationLayer, local.X);
+        Canvas.SetTop(AnnotationLayer, local.Y);
+        AnnotationLayer.InvalidateVisual();
+    }
+
+    private void PositionActionBar(bool hasIntersection, Rect local, double width, double height)
+    {
+        ActionBar.MaxWidth = Math.Max(1, width - 16);
+        ActionBar.Measure(new Size(ActionBar.MaxWidth, height));
+        double toolbarWidth = ActionBar.DesiredSize.Width;
+        double toolbarHeight = ActionBar.DesiredSize.Height;
+        double x = hasIntersection ? local.Right - toolbarWidth : (width - toolbarWidth) / 2;
+        double y = hasIntersection ? local.Bottom + 12 : (height - toolbarHeight) / 2;
+        if (y + toolbarHeight > height - 8)
+            y = hasIntersection && local.Top >= toolbarHeight + 20 ? local.Top - toolbarHeight - 12 : height - toolbarHeight - 12;
+        Canvas.SetLeft(ActionBar, Math.Clamp(x, 8, Math.Max(8, width - toolbarWidth - 8)));
+        Canvas.SetTop(ActionBar, Math.Clamp(y, 8, Math.Max(8, height - toolbarHeight - 8)));
     }
 
     /// <summary>无选区时高亮光标下的窗口，单击即可整窗截取。</summary>
@@ -186,6 +239,28 @@ public partial class OverlayWindow : Window
         if (HintBar.IsMouseOver || ActionBar.IsMouseOver) return;
         Activate();
         Focus();
+        NativeCapture.ForceForeground(_handle);
+
+        if (_tool != AnnotationTool.None)
+        {
+            if (!HasSelection || !TrySurfacePoint(e.GetPosition(AnnotationLayer), out Point anchor)) return;
+            e.Handled = true;
+            if (_tool == AnnotationTool.Text)
+            {
+                BeginTextInput(e.GetPosition(ControlsLayer), anchor);
+                return;
+            }
+            if (!Mouse.Capture(this, CaptureMode.Element)) return;
+            _drawing = true;
+            _drawStart = anchor;
+            _strokePoints = _tool is AnnotationTool.Pen or AnnotationTool.Mosaic
+                ? new List<Point> { anchor }
+                : null;
+            _draft = BuildStroke(_strokePoints);
+            AnnotationLayer.SetPreview(_draft);
+            return;
+        }
+
         if (!Mouse.Capture(this, CaptureMode.Element)) return;
         _dragCaptured = true;
         // 先不建选区：单击要能截取整窗，只有拖动超过系统阈值才转为区域截图。
@@ -197,6 +272,11 @@ public partial class OverlayWindow : Window
 
     private void OnSelectionMove(object sender, MouseEventArgs e)
     {
+        if (_drawing)
+        {
+            if (TrySurfacePoint(e.GetPosition(AnnotationLayer), out Point point)) UpdateDraft(point);
+            return;
+        }
         if (!_dragCaptured)
         {
             UpdateHover();
@@ -204,7 +284,7 @@ public partial class OverlayWindow : Window
         }
         if (_pressPending)
         {
-            System.Windows.Point current = e.GetPosition(this);
+            Point current = e.GetPosition(this);
             if (Math.Abs(current.X - _pressPosition.X) < SystemParameters.MinimumHorizontalDragDistance
                 && Math.Abs(current.Y - _pressPosition.Y) < SystemParameters.MinimumVerticalDragDistance)
                 return;
@@ -217,6 +297,12 @@ public partial class OverlayWindow : Window
 
     private void OnSelectionUp(object sender, MouseButtonEventArgs e)
     {
+        if (_drawing)
+        {
+            FinishDrawing();
+            e.Handled = true;
+            return;
+        }
         if (!_dragCaptured) return;
         bool wasClick = _pressPending;
         _pressPending = false;
@@ -242,18 +328,19 @@ public partial class OverlayWindow : Window
     private void OnRightButtonDown(object sender, MouseButtonEventArgs e)
     {
         e.Handled = true;
+        if (_tool != AnnotationTool.None) { SetTool(AnnotationTool.None); return; }
         _session.Cancel();
     }
 
     private void OnMouseLeave(object sender, MouseEventArgs e)
     {
-        if (!_dragCaptured) ClearHover();
+        if (!_dragCaptured && !_drawing) ClearHover();
     }
 
     private void UpdateHover()
     {
         if (HintBar.IsMouseOver || ActionBar.IsMouseOver) { ClearHover(); return; }
-        if (_selection.Width > 0 && _selection.Height > 0) { ClearHover(); return; }
+        if (HasSelection) { ClearHover(); return; }
 
         DrawingPoint cursor = NativeCapture.CursorPosition();
         // 缓存命中时省掉一次全窗口枚举：鼠标仍停在上次命中的窗口上就不必重新查。
@@ -275,6 +362,7 @@ public partial class OverlayWindow : Window
 
     private void OnLostMouseCapture(object sender, MouseEventArgs e)
     {
+        if (_drawing) { FinishDrawing(); return; }
         if (!_dragCaptured) return;
         _dragCaptured = false;
         _pressPending = false;
@@ -288,11 +376,74 @@ public partial class OverlayWindow : Window
         if (ReferenceEquals(Mouse.Captured, this)) Mouse.Capture(null);
     }
 
+    internal void PrepareForScrolling()
+    {
+        CancelTextInput();
+        _drawing = false;
+        _draft = null;
+        ReleaseDrag();
+    }
+
     private void OnPreviewKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape) { _session.Cancel(); e.Handled = true; }
-        else if (e.Key == Key.F) { _session.SelectFullScreen((Keyboard.Modifiers & ModifierKeys.Control) != 0); e.Handled = true; }
-        else if (e.Key == Key.Enter) { _session.Complete(CaptureAction.Copy); e.Handled = true; }
+        // 中文输入法激活时字母键报告为 ImeProcessed，真实键在 ImeProcessedKey；
+        // Alt 组合报告为 System，真实键在 SystemKey。不归一化的话 R/E/A/M 全都收不到。
+        Key key = e.Key == Key.System ? e.SystemKey
+            : e.Key == Key.ImeProcessed ? e.ImeProcessedKey
+            : e.Key;
+
+        if (_textEditor is not null && _textEditor.IsKeyboardFocusWithin)
+        {
+            if (key == Key.Escape) { CancelTextInput(); e.Handled = true; }
+            else if (key == Key.Enter && (Keyboard.Modifiers & ModifierKeys.Shift) == 0)
+            {
+                CommitTextInput();
+                e.Handled = true;
+            }
+            return;
+        }
+
+        ModifierKeys modifiers = Keyboard.Modifiers;
+        if (key == Key.Escape)
+        {
+            if (_tool != AnnotationTool.None) { SetTool(AnnotationTool.None); e.Handled = true; return; }
+            _session.Cancel();
+            e.Handled = true;
+            return;
+        }
+        if ((modifiers & ModifierKeys.Control) != 0)
+        {
+            switch (key)
+            {
+                case Key.Z: AnnotationLayer.Undo(); e.Handled = true; return;
+                case Key.S: _session.Complete(CaptureAction.Save); e.Handled = true; return;
+                case Key.P: _session.Complete(CaptureAction.Pin); e.Handled = true; return;
+                case Key.E: _ = RunTextAsync(false); e.Handled = true; return;
+                case Key.T: _ = RunTextAsync(true); e.Handled = true; return;
+                case Key.L: _ = _session.StartScrollingAsync(this); e.Handled = true; return;
+            }
+        }
+        if (modifiers == ModifierKeys.None && HasSelection)
+        {
+            AnnotationTool? shortcut = key switch
+            {
+                Key.R => AnnotationTool.Rectangle,
+                Key.E => AnnotationTool.Ellipse,
+                Key.A => AnnotationTool.Arrow,
+                Key.B => AnnotationTool.Pen,
+                Key.M => AnnotationTool.Mosaic,
+                Key.T => AnnotationTool.Text,
+                _ => null
+            };
+            if (shortcut is not null)
+            {
+                SetTool(_tool == shortcut ? AnnotationTool.None : shortcut.Value);
+                e.Handled = true;
+                return;
+            }
+        }
+        if (key == Key.F) { _session.SelectFullScreen((modifiers & ModifierKeys.Control) != 0); e.Handled = true; }
+        else if (key == Key.Enter) { _session.Complete(CaptureAction.Copy); e.Handled = true; }
     }
 
     private void OnCurrentScreen(object sender, RoutedEventArgs e) => _session.SelectFullScreen(false);
@@ -301,6 +452,226 @@ public partial class OverlayWindow : Window
     private void OnSave(object sender, RoutedEventArgs e) => _session.Complete(CaptureAction.Save);
     private void OnPin(object sender, RoutedEventArgs e) => _session.Complete(CaptureAction.Pin);
     private void OnCancel(object sender, RoutedEventArgs e) => _session.Cancel();
+
+    private void OnRectangleTool(object sender, RoutedEventArgs e) => SetTool(AnnotationTool.Rectangle);
+    private void OnEllipseTool(object sender, RoutedEventArgs e) => SetTool(AnnotationTool.Ellipse);
+    private void OnArrowTool(object sender, RoutedEventArgs e) => SetTool(AnnotationTool.Arrow);
+    private void OnPenTool(object sender, RoutedEventArgs e) => SetTool(AnnotationTool.Pen);
+    private void OnMosaicTool(object sender, RoutedEventArgs e) => SetTool(AnnotationTool.Mosaic);
+    private void OnTextTool(object sender, RoutedEventArgs e) => SetTool(AnnotationTool.Text);
+    private void OnUndoClick(object sender, RoutedEventArgs e) => AnnotationLayer.Undo();
+
+    private void OnColorRed(object sender, MouseButtonEventArgs e) => SetColor(Color.FromRgb(0xF5, 0x22, 0x2D));
+    private void OnColorOrange(object sender, MouseButtonEventArgs e) => SetColor(Color.FromRgb(0xFA, 0x8C, 0x16));
+    private void OnColorBlue(object sender, MouseButtonEventArgs e) => SetColor(Color.FromRgb(0x16, 0x77, 0xFF));
+    private void OnColorGreen(object sender, MouseButtonEventArgs e) => SetColor(Color.FromRgb(0x22, 0xC5, 0x5E));
+
+    private void SetColor(Color color)
+    {
+        _color = color;
+        UpdateColorVisuals();
+    }
+
+    private void UpdateColorVisuals()
+    {
+        (Border Swatch, Color Value)[] swatches =
+        {
+            (ColorRed, Color.FromRgb(0xF5, 0x22, 0x2D)),
+            (ColorOrange, Color.FromRgb(0xFA, 0x8C, 0x16)),
+            (ColorBlue, Color.FromRgb(0x16, 0x77, 0xFF)),
+            (ColorGreen, Color.FromRgb(0x22, 0xC5, 0x5E))
+        };
+        foreach ((Border swatch, Color value) in swatches)
+            swatch.BorderBrush = value == _color ? Brushes.White : Brushes.Transparent;
+    }
+
+    private void SetTool(AnnotationTool tool)
+    {
+        CommitTextInput();
+        _tool = tool;
+        _draft = null;
+        _drawing = false;
+        _strokePoints = null;
+        AnnotationLayer.SetPreview(null);
+        ReleaseDrag();
+        UpdateToolVisuals();
+        Cursor = tool switch
+        {
+            AnnotationTool.None => Cursors.Cross,
+            AnnotationTool.Text => Cursors.IBeam,
+            _ => Cursors.Pen
+        };
+    }
+
+    private void UpdateToolVisuals()
+    {
+        var active = new SolidColorBrush(Color.FromRgb(0x25, 0x63, 0xEB));
+        var idle = new SolidColorBrush(Color.FromRgb(0x26, 0x34, 0x4A));
+        var idleBorder = new SolidColorBrush(Color.FromRgb(0x3E, 0x51, 0x70));
+        (Button Button, AnnotationTool Tool)[] tools =
+        {
+            (RectangleTool, AnnotationTool.Rectangle),
+            (EllipseTool, AnnotationTool.Ellipse),
+            (ArrowTool, AnnotationTool.Arrow),
+            (PenTool, AnnotationTool.Pen),
+            (MosaicTool, AnnotationTool.Mosaic),
+            (TextTool, AnnotationTool.Text)
+        };
+        foreach ((Button button, AnnotationTool tool) in tools)
+        {
+            bool selected = _tool == tool;
+            button.Background = selected ? active : idle;
+            button.BorderBrush = selected ? Brushes.White : idleBorder;
+        }
+    }
+
+    private bool TrySurfacePoint(Point dipPoint, out Point surface)
+    {
+        surface = AnnotationLayer.ToSurfacePoint(dipPoint);
+        return HasSelection
+               && surface.X >= -4 && surface.Y >= -4
+               && surface.X <= _selection.Width + 4 && surface.Y <= _selection.Height + 4;
+    }
+
+    private Annotation? BuildStroke(List<Point>? points)
+    {
+        if (points is null) return null;
+        return _tool switch
+        {
+            AnnotationTool.Pen => new PenAnnotation(points, _color, StrokeThickness),
+            AnnotationTool.Mosaic => new MosaicAnnotation(points, 26 / Math.Max(0.2, AnnotationLayer.Scale), _color, 0),
+            _ => null
+        };
+    }
+
+    private void UpdateDraft(Point point)
+    {
+        switch (_tool)
+        {
+            case AnnotationTool.Rectangle:
+                _draft = new RectangleAnnotation(Normalize(_drawStart, point), _color, StrokeThickness);
+                break;
+            case AnnotationTool.Ellipse:
+                _draft = new EllipseAnnotation(Normalize(_drawStart, point), _color, StrokeThickness);
+                break;
+            case AnnotationTool.Arrow:
+                _draft = new ArrowAnnotation(_drawStart, point, _color, StrokeThickness);
+                break;
+            case AnnotationTool.Pen:
+            case AnnotationTool.Mosaic:
+                if (_strokePoints is null) return;
+                Point last = _strokePoints[^1];
+                if ((point - last).Length < 1.5) return;
+                _strokePoints.Add(point);
+                _draft = BuildStroke(_strokePoints);
+                break;
+        }
+        AnnotationLayer.SetPreview(_draft);
+    }
+
+    private void FinishDrawing()
+    {
+        _drawing = false;
+        if (_draft is not null && IsMeaningful(_draft)) AnnotationLayer.Add(_draft);
+        _draft = null;
+        _strokePoints = null;
+        AnnotationLayer.SetPreview(null);
+        if (ReferenceEquals(Mouse.Captured, this)) Mouse.Capture(null);
+    }
+
+    private static bool IsMeaningful(Annotation annotation) => annotation switch
+    {
+        RectangleAnnotation rectangle => rectangle.Bounds.Width > 3 && rectangle.Bounds.Height > 3,
+        EllipseAnnotation ellipse => ellipse.Bounds.Width > 3 && ellipse.Bounds.Height > 3,
+        ArrowAnnotation arrow => (arrow.End - arrow.Start).Length > 6,
+        PenAnnotation pen => pen.Points.Count > 1,
+        MosaicAnnotation mosaic => mosaic.Points.Count > 0,
+        _ => true
+    };
+
+    private static Rect Normalize(Point a, Point b) => new(
+        Math.Min(a.X, b.X), Math.Min(a.Y, b.Y), Math.Abs(a.X - b.X), Math.Abs(a.Y - b.Y));
+
+    private void BeginTextInput(Point dipPoint, Point surfacePoint)
+    {
+        CommitTextInput();
+        _textAnchor = surfacePoint;
+        _textEditor = new TextBox
+        {
+            MinWidth = 150,
+            Padding = new Thickness(4, 2, 4, 2),
+            FontSize = 14,
+            AcceptsReturn = true,
+            Background = new SolidColorBrush(Color.FromArgb(240, 255, 255, 255)),
+            Foreground = new SolidColorBrush(_color),
+            BorderBrush = new SolidColorBrush(_color),
+            BorderThickness = new Thickness(2),
+            ToolTip = "输入文字，Enter 确认，Shift+Enter 换行，Esc 取消"
+        };
+        Canvas.SetLeft(_textEditor, Math.Max(0, dipPoint.X));
+        Canvas.SetTop(_textEditor, Math.Max(0, dipPoint.Y));
+        ControlsLayer.Children.Add(_textEditor);
+        _textEditor.LostKeyboardFocus += (_, _) => CommitTextInput();
+        _textEditor.Focus();
+    }
+
+    private void CommitTextInput()
+    {
+        TextBox? editor = _textEditor;
+        if (editor is null) return;
+        _textEditor = null;
+        ControlsLayer.Children.Remove(editor);
+        string text = editor.Text.Trim();
+        // 字号按物理像素给出：屏幕上 20 DIP 的字，导出后仍然是这个视觉比例。
+        if (text.Length > 0)
+            AnnotationLayer.Add(new TextAnnotation(_textAnchor, text, _color,
+                20 / Math.Max(0.2, AnnotationLayer.Scale)));
+    }
+
+    private void CancelTextInput()
+    {
+        TextBox? editor = _textEditor;
+        if (editor is null) return;
+        _textEditor = null;
+        ControlsLayer.Children.Remove(editor);
+    }
+
+    private async void OnOcrClick(object sender, RoutedEventArgs e) => await RunTextAsync(false);
+
+    private async void OnTranslateClick(object sender, RoutedEventArgs e) => await RunTextAsync(true);
+
+    private async System.Threading.Tasks.Task RunTextAsync(bool translate)
+    {
+        BitmapSource? image = _session.SelectionImage;
+        if (image is null) return;
+        if (!OcrService.IsAvailable)
+        {
+            MessageBox.Show(this, OcrService.UnavailableReason, "轻截 · 文字识别",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        // OCR 用未经标注的原始像素：箭头和马赛克会干扰识别。
+        _session.Cancel();
+        try
+        {
+            string text = await OcrService.RecognizeAsync(image);
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                MessageBox.Show("这个区域没有识别到文字，换一块再试。", "轻截 · 文字识别",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            new TextResultWindow(text, translate).Show();
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show("文字识别失败：" + ex.Message, "轻截 · 文字识别",
+                MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private async void OnScrollClick(object sender, RoutedEventArgs e) => await _session.StartScrollingAsync(this);
 
     private void OnClosing(object? sender, CancelEventArgs e)
     {
@@ -314,6 +685,7 @@ public partial class OverlayWindow : Window
     {
         _closingFromSession = true;
         _hoverTarget = null;
+        CancelTextInput();
         ReleaseDrag();
         SourceInitialized -= OnSourceInitialized;
         Loaded -= OnLoaded;

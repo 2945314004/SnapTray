@@ -5,6 +5,8 @@ using System.Linq;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using SnapTray.Helpers;
+using WpfPoint = System.Windows.Point;
+using WpfRect = System.Windows.Rect;
 using SnapTray.Models;
 using SnapTray.Services;
 using DrawingRectangle = System.Drawing.Rectangle;
@@ -36,6 +38,10 @@ internal static class Program
         Run("Geometry: bitmap rectangle rejects non-intersecting region", BitmapRectangleGuards);
         Run("Geometry: nearest monitor for gap and negative coordinates", NearestMonitor);
         Run("Hotkey: gesture validation and display names", HotkeyGestureRules);
+        Run("Annotation: rectangle stroke paints the border only", AnnotationRectangle);
+        Run("Annotation: mosaic replaces cells with sampled colours", AnnotationMosaic);
+        Run("Annotation: empty list returns the original bitmap", AnnotationPassthrough);
+        Run("OCR: recognises text rendered into a bitmap", OcrRecognisesRenderedText);
         Run("Hotkey: conflict preserves old binding; switching and disposal release it", HotkeyLifecycle);
 
         if (args.Contains("--capture", StringComparer.OrdinalIgnoreCase))
@@ -275,6 +281,130 @@ internal static class Program
             "Combined shortcut label");
         Equal("小键盘 3", HotkeyGesture.GetKeyName(0x63), "Numpad name");
         Equal("F12", HotkeyGesture.GetKeyName(0x7B), "Function key name");
+    }
+
+    private static BitmapSource SolidBitmap(int width, int height, System.Windows.Media.Color color)
+    {
+        byte[] pixels = new byte[width * height * 4];
+        for (int i = 0; i < pixels.Length; i += 4)
+        {
+            pixels[i] = color.B;
+            pixels[i + 1] = color.G;
+            pixels[i + 2] = color.R;
+            pixels[i + 3] = 255;
+        }
+        var image = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, width * 4);
+        image.Freeze();
+        return image;
+    }
+
+    private static byte[] ToBgra(BitmapSource image)
+    {
+        int stride = image.PixelWidth * 4;
+        byte[] buffer = new byte[stride * image.PixelHeight];
+        BitmapSource source = image.Format == PixelFormats.Bgra32
+            ? image
+            : new FormatConvertedBitmap(image, PixelFormats.Bgra32, null, 0);
+        source.CopyPixels(buffer, stride, 0);
+        return buffer;
+    }
+
+    private static void AnnotationRectangle()
+    {
+        BitmapSource source = SolidBitmap(100, 100, System.Windows.Media.Colors.White);
+        var items = new List<Annotation>
+        {
+            new RectangleAnnotation(new WpfRect(20, 20, 40, 40), System.Windows.Media.Colors.Red, 4)
+        };
+        BitmapSource composed = AnnotationRenderer.Compose(source, items);
+        byte[] pixels = ToBgra(composed);
+        Equal(100, composed.PixelWidth, "Compose must keep the pixel width");
+        Equal(100, composed.PixelHeight, "Compose must keep the pixel height");
+
+        int border = (40 * 100 + 20) * 4;   // 左边框上的一点 (20,40)
+        Require(pixels[border + 2] > 180 && pixels[border + 1] < 90,
+            $"Rectangle border should be painted red, got B={pixels[border]} G={pixels[border + 1]} R={pixels[border + 2]}");
+
+        int inside = (40 * 100 + 40) * 4;   // 框内部 (40,40) 不应被填充
+        Require(pixels[inside] > 230 && pixels[inside + 1] > 230 && pixels[inside + 2] > 230,
+            "Rectangle must not fill its interior");
+    }
+
+    private static void AnnotationMosaic()
+    {
+        // 竖条纹底图：每 10px 一列不同颜色，马赛克后同一格内应变成纯色。
+        const int width = 100, height = 100;
+        byte[] source = new byte[width * height * 4];
+        for (int y = 0; y < height; y++)
+        for (int x = 0; x < width; x++)
+        {
+            int offset = (y * width + x) * 4;
+            source[offset] = (byte)(x * 2);
+            source[offset + 1] = (byte)(x * 3 % 255);
+            source[offset + 2] = (byte)(x * 5 % 255);
+            source[offset + 3] = 255;
+        }
+        var bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, source, width * 4);
+        bitmap.Freeze();
+
+        var items = new List<Annotation>
+        {
+            new MosaicAnnotation(new[] { new WpfPoint(50, 50) }, 41, System.Windows.Media.Colors.Black, 0)
+        };
+        byte[] composed = ToBgra(AnnotationRenderer.Compose(bitmap, items));
+
+        int a = (45 * width + 45) * 4;
+        int b = (48 * width + 48) * 4;
+        Require(composed[a] == composed[b] && composed[a + 1] == composed[b + 1] && composed[a + 2] == composed[b + 2],
+            "Pixels inside one mosaic cell must share the sampled colour");
+
+        int outside = (95 * width + 95) * 4;
+        Require(composed[outside] == source[outside] && composed[outside + 2] == source[outside + 2],
+            "Pixels outside the mosaic brush must be untouched");
+
+        // 纯色底图上取样必须还原成同一个颜色：能抓出行/列映射错位（stride 算错会取到别的行）。
+        BitmapSource green = SolidBitmap(120, 120, System.Windows.Media.Color.FromRgb(0, 128, 0));
+        var solidMosaic = new List<Annotation>
+        {
+            new MosaicAnnotation(new[] { new WpfPoint(60, 60) }, 30, System.Windows.Media.Colors.Black, 0)
+        };
+        byte[] solid = ToBgra(AnnotationRenderer.Compose(green, solidMosaic));
+        int center = (60 * 120 + 60) * 4;
+        Require(solid[center + 1] > 120 && solid[center] < 12 && solid[center + 2] < 12,
+            $"Mosaic on a green area must keep the green tone, got B={solid[center]} G={solid[center + 1]} R={solid[center + 2]}");
+        int corner = (2 * 120 + 2) * 4;
+        Require(solid[corner + 1] > 120 && solid[corner] < 12,
+            "Mosaic must not paint outside its brush radius");
+    }
+
+    private static void AnnotationPassthrough()
+    {
+        BitmapSource source = SolidBitmap(20, 20, System.Windows.Media.Colors.White);
+        BitmapSource composed = AnnotationRenderer.Compose(source, Array.Empty<Annotation>());
+        Require(ReferenceEquals(source, composed), "Compose without annotations should not copy pixels");
+    }
+
+    private static void OcrRecognisesRenderedText()
+    {
+        if (!OcrService.IsAvailable)
+            throw new SkipException(OcrService.UnavailableReason ?? "系统没有可用的 OCR 引擎");
+
+        // 先用 WPF 把文字画进位图，再交给 OCR，形成"栅格化 → 识别"的闭环，不依赖真实屏幕内容。
+        const string expected = "SnapTray 123";
+        var visual = new DrawingVisual();
+        using (DrawingContext context = visual.RenderOpen())
+        {
+            context.DrawRectangle(Brushes.White, null, new WpfRect(0, 0, 460, 100));
+            var text = new FormattedText(expected, System.Globalization.CultureInfo.InvariantCulture,
+                System.Windows.FlowDirection.LeftToRight, new Typeface("Segoe UI"), 44, Brushes.Black, 1.0);
+            context.DrawText(text, new WpfPoint(20, 22));
+        }
+        var bitmap = new RenderTargetBitmap(460, 100, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(visual);
+        bitmap.Freeze();
+
+        string result = OcrService.RecognizeAsync(bitmap).GetAwaiter().GetResult();
+        Require(result.Contains("123"), $"OCR 结果里应出现 123，实际得到：{result.Replace('\n', ' ')}");
     }
 
     private static void HotkeyLifecycle()

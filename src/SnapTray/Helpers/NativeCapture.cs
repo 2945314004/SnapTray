@@ -60,4 +60,52 @@ internal static class NativeCapture
         if (!SetWindowPos(handle, HwndTopmost, bounds.X, bounds.Y, bounds.Width, bounds.Height, SwpNoActivate))
             throw new Win32Exception(Marshal.GetLastWin32Error(), "无法定位截图遮罩。");
     }
+
+    /// <summary>
+    /// 把遮罩抢到前台并拿到键盘焦点。
+    /// Window.Activate() 会被系统的前台锁（ForegroundLockTimeout）拒绝——尤其程序是由
+    /// 别的进程或开机项拉起时，结果是 Esc / R / Ctrl+Z 这些快捷键全部打到别的窗口上。
+    /// 这里临时挂到当前前台线程的输入队列上再 SetForegroundWindow，绕开该限制。
+    /// </summary>
+    public static void ForceForeground(IntPtr handle)
+    {
+        if (handle == IntPtr.Zero) return;
+        IntPtr foreground = GetForegroundWindow();
+        if (foreground == handle) return;
+        uint foregroundThread = foreground == IntPtr.Zero
+            ? 0
+            : GetWindowThreadProcessId(foreground, out _);
+        uint currentThread = GetCurrentThreadId();
+        bool attached = foregroundThread != 0 && foregroundThread != currentThread;
+        if (attached) AttachThreadInput(currentThread, foregroundThread, true);
+        try
+        {
+            SetForegroundWindow(handle);
+            SetFocus(handle);
+        }
+        finally
+        {
+            if (attached) AttachThreadInput(currentThread, foregroundThread, false);
+        }
+    }
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint processId);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AttachThreadInput(uint attach, uint attachTo, [MarshalAs(UnmanagedType.Bool)] bool doAttach);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hwnd);
+
+    [DllImport("user32.dll")]
+    private static extern IntPtr SetFocus(IntPtr hwnd);
 }

@@ -303,6 +303,9 @@ public partial class App : Application
                     };
                     pin.Show();
                     return true;
+                case CaptureAction.Preview:
+                    // 不立即执行任何动作，交给预览窗口（滚动截图的长图走这条路）。
+                    return false;
                 default: throw new ArgumentOutOfRangeException(nameof(result));
             }
         }

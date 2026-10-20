@@ -4,6 +4,7 @@
     python tools/ui_drag.py 400 200 900 600    # 从 (400,200) 拖到 (900,600)
     python tools/ui_drag.py --click 600 300    # 在 (600,300) 单击
     python tools/ui_drag.py --key esc          # 发送一次按键
+    python tools/ui_drag.py --combo 17 69      # Ctrl + E
 """
 
 from __future__ import annotations
@@ -69,6 +70,18 @@ def press(vk):
     time.sleep(0.25)
 
 
+def combo(vk_modifier, vk_main):
+    """按住修饰键再按主键（例如 Ctrl+E 取字）。"""
+    user32.keybd_event(vk_modifier, 0, 0, 0)
+    time.sleep(0.06)
+    user32.keybd_event(vk_main, 0, 0, 0)
+    time.sleep(0.06)
+    user32.keybd_event(vk_main, 0, KEYEVENTF_KEYUP, 0)
+    time.sleep(0.06)
+    user32.keybd_event(vk_modifier, 0, KEYEVENTF_KEYUP, 0)
+    time.sleep(0.25)
+
+
 def wheel(x, y, notches):
     """notches > 0 向上滚（放大），< 0 向下滚。"""
     move_to(x, y)
@@ -86,6 +99,8 @@ if __name__ == "__main__":
         press(VK_ESCAPE if args[1].lower() == "esc" else int(args[1]))
     elif args and args[0] == "--click":
         click(int(args[1]), int(args[2]))
+    elif args and args[0] == "--combo":
+        combo(int(args[1]), int(args[2]))
     elif args and args[0] == "--wheel":
         wheel(int(args[1]), int(args[2]), int(args[3]))
     elif len(args) == 4:

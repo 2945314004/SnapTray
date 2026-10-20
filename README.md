@@ -18,7 +18,7 @@ Windows 托盘截图 + 桌面贴图工具，C# / WPF / .NET 8。启动后常驻�
 
 ## 直接下载（无需编译）
 
-**[SnapTray-1.0.1-win-x64.zip](https://github.com/2945314004/SnapTray/releases/download/v1.0.1/SnapTray-1.0.1-win-x64.zip)** · 58 MiB
+**[SnapTray-1.1.0-win-x64.zip](https://github.com/2945314004/SnapTray/releases/download/v1.1.0/SnapTray-1.1.0-win-x64.zip)** · 64 MiB（单个 exe）
 
 解压后双击 `SnapTray.exe` 就能用。自包含单文件，**不需要安装 .NET 运行时**；Windows 10 1809+ / Windows 11，x64。
 exe 未做代码签名，首次运行会弹 SmartScreen 蓝色提示：点「更多信息」→「仍要运行」。
@@ -101,6 +101,31 @@ JSON 损坏时自动备份为 `settings.corrupt-*.json` 并回退默认值）。
 自启项每次启动都会自检：路径对不上（程序搬家、或旧版本写入过 `dotnet.exe` 形式）就改写成当前 exe——
 后者正是登录时闪控制台的典型原因，代码里已彻底禁止生成控制台宿主命令行。
 
+## 三·五、标注、取字与滚动截图
+
+划好区之后，工具栏第二排就是编辑能力，全部作用在**选区内的物理像素**上，导出时按 1:1 烧进图片。
+
+| 工具 | 快捷键 | 说明 |
+| --- | --- | --- |
+| 矩形 / 椭圆 | `R` / `E` | 拖出边框，线宽随显示器缩放自适应 |
+| 箭头 | `A` | 自动生成箭头头部，短线也不会出现头比线细 |
+| 画笔 | `B` | 自由曲线，圆头圆角 |
+| 马赛克 | `M` | 按 10px 网格采样原图色块，涂抹即打码 |
+| 文字 | `T` | 单击落点输入，`Enter` 确认、`Shift+Enter` 换行、`Esc` 取消 |
+| 撤销 | `Ctrl+Z` | 逐笔回退 |
+| 取字 | `Ctrl+E` | 系统自带离线 OCR（`Windows.Media.Ocr`），中文识别，不联网、不要 Key |
+| 翻译 | `Ctrl+T` | 先 OCR 再翻译，自动判断中英方向，依次尝试有道 / MyMemory / Google |
+| 滚动截图 | `Ctrl+L` | 逐屏向下滚动拼接长图，`Esc` 结束 |
+| 保存 / 置顶 / 完成 | `Ctrl+S` / `Ctrl+P` / `Enter` | 与按钮等价 |
+
+**标注为什么能"所见即所存"**：标注对象只存一份坐标（选区内的物理像素），
+屏幕预览由 `AnnotationCanvas` 按显示器缩放渲染，导出时 `AnnotationRenderer.Compose` 按 1:1 渲染图层再叠到位图上——
+同一份绘制代码（`Models/Annotation.cs`）供两处调用，所以不会出现"屏幕上对、导出来错位"。
+
+**滚动截图的原理与边界**：藏起遮罩 → 逐屏抓图 → 用行特征找出两帧之间的滚动像素数 → 只拼接新露出的那几行。
+纯像素方案，不注入钩子，浏览器 / 记事本 / PDF 阅读器通用；但页面若有吸顶导航、悬浮按钮或滚动动画，
+接缝处可能留下重复条带——每次滚动前会等画面稳定再抓，能缓解但不能根除。
+
 ## 四、实现要点
 
 **多显示器与 DPI。** `app.manifest` 声明 `PerMonitorV2`，因此 UI 线程拿到的 Win32 坐标就是物理像素。
@@ -160,7 +185,6 @@ dotnet run --project tests/SnapTray.SmokeTests -c Release -- --capture  # 额外
 - 置顶 → 贴图窗口出现并可滚轮放大 1.33×。
 - `--fullscreen` → 选中 1920×1080。
 - 已常驻托盘时再执行 `SnapTray.exe --capture` → 新进程退出码 0，常驻实例弹出遮罩（进程数仍为 1）。
-
 
 ## 七、已知限制
 

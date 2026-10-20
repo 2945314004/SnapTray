@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows</TargetFramework>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
     <UseWPF>true</UseWPF>
     <!-- 打开 WinForms 只为 NotifyIcon(ContextMenuStrip) 和 Screen.WorkingArea，不使用任何 WinForms 窗体。 -->
     <UseWindowsForms>true</UseWindowsForms>
@@ -11,7 +11,7 @@
     <ApplicationIcon>Assets\SnapTray.ico</ApplicationIcon>
     <AssemblyName>SnapTray</AssemblyName>
     <RootNamespace>SnapTray</RootNamespace>
-    <Version>1.0.1</Version>
+    <Version>1.1.0</Version>
     <Description>轻截 — 托盘截图与桌面贴图工具</Description>
     <!--
       WFAC010 要求把 DPI 设置从清单搬到 ApplicationHighDpiMode。这条规则只对 WinForms 窗体有意义，
