@@ -1,4 +1,4 @@
-# 开机自启"黑框"排查工具
+﻿# 开机自启"黑框"排查工具
 #
 # 列出本机所有自启入口（HKCU/HKLM Run、用户/公共启动文件夹），
 # 读出每个程序的 PE 子系统：GUI 的启动时不会有窗口；CONSOLE 的才会闪黑框。
@@ -31,7 +31,14 @@ function Get-ExeFromCommand([string]$Command) {
     if ([string]::IsNullOrWhiteSpace($Command)) { return '' }
     $text = $Command.Trim()
     if ($text.StartsWith('"')) { return $text.Split('"')[1] }
-    return ($text -split ' ')[0]
+    # 未加引号的路径可能自带空格（如 D:\MiniMax Code\MiniMax Code.exe --startup）：
+    # 从左到右找最长的、以 .exe 结尾且真实存在的前缀。
+    $parts = $text -split '\s+'
+    for ($i = $parts.Count; $i -ge 1; $i--) {
+        $candidate = ($parts[0..($i - 1)] -join ' ')
+        if ($candidate -match '(?i)\.exe$' -and (Test-Path -LiteralPath $candidate)) { return $candidate }
+    }
+    return $parts[0]
 }
 
 $rows = New-Object System.Collections.Generic.List[object]
