@@ -161,8 +161,6 @@ dotnet run --project tests/SnapTray.SmokeTests -c Release -- --capture  # 额外
 - `--fullscreen` → 选中 1920×1080。
 - 已常驻托盘时再执行 `SnapTray.exe --capture` → 新进程退出码 0，常驻实例弹出遮罩（进程数仍为 1）。
 
-仍需人工确认（自动化不方便模拟）：真实混合 DPI 多屏下的鼠标手感、通知区图标是否进溢出区、
-开机自启重启后的实际拉起、以及被其他程序占用的热键组合。
 
 ## 七、已知限制
 
