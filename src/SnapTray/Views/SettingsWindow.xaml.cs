@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Win32;
+using SnapTray.Helpers;
 using SnapTray.Models;
 using SnapTray.ViewModels;
 
@@ -23,6 +24,7 @@ public partial class SettingsWindow : Window
         _viewModel = new SettingsViewModel(current);
         InitializeComponent();
         DataContext = _viewModel;
+        VersionText.Text = $"v{AppInfo.Version}";
         Loaded += (_, _) => FitToWorkArea();
     }
 

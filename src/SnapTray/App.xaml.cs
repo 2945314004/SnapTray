@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Threading;
+using SnapTray.Helpers;
 using SnapTray.Models;
 using SnapTray.Services;
 using SnapTray.Views;
@@ -342,6 +343,9 @@ public partial class App : Application
         _settingsWindow = new SettingsWindow(_settings.Clone(), ApplySettings);
         _settingsWindow.Closed += (_, _) => _settingsWindow = null;
         _settingsWindow.Show();
+        // 程序常在后台（托盘）运行，Show() 出来的窗口容易被前台窗口压住，这里强制提到最前。
+        NativeCapture.ForceForeground(new System.Windows.Interop.WindowInteropHelper(_settingsWindow).Handle);
+        _settingsWindow.Activate();
     }
 
     private string? ApplySettings(AppSettings candidate)

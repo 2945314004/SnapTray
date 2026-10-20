@@ -31,10 +31,17 @@
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
-        <StackPanel Margin="0,0,0,20">
-            <TextBlock Text="轻截" FontSize="26" FontWeight="SemiBold" Foreground="#172033" />
-            <TextBlock Text="随手截图，留在眼前。" Style="{StaticResource Hint}" Margin="0,5,0,0" />
-        </StackPanel>
+        <Grid Margin="0,0,0,20">
+            <StackPanel>
+                <TextBlock Text="轻截" FontSize="26" FontWeight="SemiBold" Foreground="#172033" />
+                <TextBlock Text="随手截图，留在眼前。" Style="{StaticResource Hint}" Margin="0,5,0,0" />
+            </StackPanel>
+            <Border HorizontalAlignment="Right" VerticalAlignment="Top" Background="#E8EEF7"
+                    CornerRadius="10" Padding="10,4" ToolTip="构建自仓库的当前版本">
+                <TextBlock x:Name="VersionText" Text="v1.0.0" FontSize="12" Foreground="#33507A"
+                           AutomationProperties.Name="当前版本号" />
+            </Border>
+        </Grid>
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel>
                 <Border Style="{StaticResource Card}">

@@ -36,6 +36,10 @@ public partial class OverlayWindow : Window
     private List<Point>? _strokePoints;
     private Point _drawStart;
     private Color _color = Color.FromRgb(0xF5, 0x22, 0x2D);
+    // 笔头粗细档位：细 / 中 / 粗。画笔按线宽换算，马赛克按笔刷直径换算。
+    private static readonly double[] PenWidths = { 2, 4, 8 };
+    private static readonly double[] MosaicSizes = { 14, 26, 44 };
+    private int _sizeLevel = 1;
     private TextBox? _textEditor;
     private Point _textAnchor;
     private AnnotationSurface? _surface;
@@ -111,7 +115,10 @@ public partial class OverlayWindow : Window
     private bool HasSelection => _selection.Width > 0 && _selection.Height > 0;
 
     /// <summary>标注线宽按显示器缩放换算，保证 150% 屏上看起来和 100% 屏一样粗。</summary>
-    private double StrokeThickness => 3.0 / Math.Max(0.2, AnnotationLayer.Scale);
+    private double StrokeThickness => PenWidths[_sizeLevel] / Math.Max(0.2, AnnotationLayer.Scale);
+
+    /// <summary>马赛克笔刷直径（物理像素），同样随显示器缩放。</summary>
+    private double MosaicBrushSize => MosaicSizes[_sizeLevel] / Math.Max(0.2, AnnotationLayer.Scale);
 
     private void Redraw()
     {
@@ -495,6 +502,7 @@ public partial class OverlayWindow : Window
         AnnotationLayer.SetPreview(null);
         ReleaseDrag();
         UpdateToolVisuals();
+        UpdateBrushPanel();
         Cursor = tool switch
         {
             AnnotationTool.None => Cursors.Cross,
@@ -525,6 +533,34 @@ public partial class OverlayWindow : Window
         }
     }
 
+    /// <summary>粗细只对画笔和马赛克有意义，其它工具选中时整块隐藏，避免误以为能调。</summary>
+    private void UpdateBrushPanel()
+    {
+        bool visible = _tool is AnnotationTool.Pen or AnnotationTool.Mosaic;
+        BrushSizePanel.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        SizeSeparator.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        if (!visible) return;
+        Border[] swatches = { SizeSmall, SizeMedium, SizeLarge };
+        for (int i = 0; i < swatches.Length; i++)
+        {
+            bool active = i == _sizeLevel;
+            swatches[i].BorderBrush = active ? Brushes.White : Brushes.Transparent;
+            swatches[i].Background = new SolidColorBrush(active
+                ? Color.FromRgb(0x25, 0x63, 0xEB)
+                : Color.FromRgb(0x26, 0x34, 0x4A));
+        }
+    }
+
+    private void SetSizeLevel(int level)
+    {
+        _sizeLevel = Math.Clamp(level, 0, PenWidths.Length - 1);
+        UpdateBrushPanel();
+    }
+
+    private void OnSizeSmall(object sender, MouseButtonEventArgs e) => SetSizeLevel(0);
+    private void OnSizeMedium(object sender, MouseButtonEventArgs e) => SetSizeLevel(1);
+    private void OnSizeLarge(object sender, MouseButtonEventArgs e) => SetSizeLevel(2);
+
     private bool TrySurfacePoint(Point dipPoint, out Point surface)
     {
         surface = AnnotationLayer.ToSurfacePoint(dipPoint);
@@ -539,7 +575,7 @@ public partial class OverlayWindow : Window
         return _tool switch
         {
             AnnotationTool.Pen => new PenAnnotation(points, _color, StrokeThickness),
-            AnnotationTool.Mosaic => new MosaicAnnotation(points, 26 / Math.Max(0.2, AnnotationLayer.Scale), _color, 0),
+            AnnotationTool.Mosaic => new MosaicAnnotation(points, MosaicBrushSize, _color, 0),
             _ => null
         };
     }

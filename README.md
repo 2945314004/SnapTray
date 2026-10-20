@@ -18,7 +18,7 @@ Windows 托盘截图 + 桌面贴图工具，C# / WPF / .NET 8。启动后常驻�
 
 ## 直接下载（无需编译）
 
-**[SnapTray-1.1.0-win-x64.zip](https://github.com/2945314004/SnapTray/releases/download/v1.1.0/SnapTray-1.1.0-win-x64.zip)** · 64 MiB（单个 exe）
+**[SnapTray-1.1.1-win-x64.zip](https://github.com/2945314004/SnapTray/releases/download/v1.1.1/SnapTray-1.1.1-win-x64.zip)** · 64 MiB（单个 exe）
 
 解压后双击 `SnapTray.exe` 就能用。自包含单文件，**不需要安装 .NET 运行时**；Windows 10 1809+ / Windows 11，x64。
 exe 未做代码签名，首次运行会弹 SmartScreen 蓝色提示：点「更多信息」→「仍要运行」。
@@ -94,6 +94,8 @@ dotnet publish src/SnapTray -c Release -r win-x64 --self-contained true `
 
 托盘图标：双击 = 区域截图；右键菜单 = 区域截图 / 全屏截图 / 打开保存目录 / 设置 / 退出。
 
+设置窗口右上角显示当前版本号（取自程序集，发版时随 `<Version>` 自动更新）。
+
 设置项：开机自启（写 `HKCU\...\CurrentVersion\Run`，路径整体加引号并带 `--startup`）、自定义快捷键（Alt/Ctrl/Shift +
 任意主键，应用后立即生效）、默认保存目录。配置持久化在 `%AppData%\SnapTray\settings.json`（原子替换写入，
 JSON 损坏时自动备份为 `settings.corrupt-*.json` 并回退默认值）。
@@ -109,14 +111,17 @@ JSON 损坏时自动备份为 `settings.corrupt-*.json` 并回退默认值）。
 | --- | --- | --- |
 | 矩形 / 椭圆 | `R` / `E` | 拖出边框，线宽随显示器缩放自适应 |
 | 箭头 | `A` | 自动生成箭头头部，短线也不会出现头比线细 |
-| 画笔 | `B` | 自由曲线，圆头圆角 |
-| 马赛克 | `M` | 按 10px 网格采样原图色块，涂抹即打码 |
+| 画笔 | `B` | 自由曲线，圆头圆角；可切换**细 / 中 / 粗**三档笔头 |
+| 马赛克 | `M` | 按 10px 网格采样原图色块；笔刷同样是**细 / 中 / 粗**三档 |
 | 文字 | `T` | 单击落点输入，`Enter` 确认、`Shift+Enter` 换行、`Esc` 取消 |
 | 撤销 | `Ctrl+Z` | 逐笔回退 |
 | 取字 | `Ctrl+E` | 系统自带离线 OCR（`Windows.Media.Ocr`），中文识别，不联网、不要 Key |
 | 翻译 | `Ctrl+T` | 先 OCR 再翻译，自动判断中英方向，依次尝试有道 / MyMemory / Google |
 | 滚动截图 | `Ctrl+L` | 逐屏向下滚动拼接长图，`Esc` 结束 |
 | 保存 / 置顶 / 完成 | `Ctrl+S` / `Ctrl+P` / `Enter` | 与按钮等价 |
+
+选中画笔或马赛克时，颜色圆点右边会出现「粗细 ○ ● ○」，细/中/粗分别对应
+画笔 2/4/8 px 线宽、马赛克 14/26/44 px 笔刷直径（都按显示器缩放换算，跨 DPI 视觉一致）。
 
 **标注为什么能"所见即所存"**：标注对象只存一份坐标（选区内的物理像素），
 屏幕预览由 `AnnotationCanvas` 按显示器缩放渲染，导出时 `AnnotationRenderer.Compose` 按 1:1 渲染图层再叠到位图上——

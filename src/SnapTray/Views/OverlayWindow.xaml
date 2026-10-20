@@ -82,6 +82,31 @@
                         <Border x:Name="ColorGreen" Width="18" Height="18" CornerRadius="9" Background="#22C55E"
                                 Margin="4,0" BorderThickness="2" BorderBrush="Transparent" Cursor="Hand"
                                 ToolTip="绿色" MouseLeftButtonDown="OnColorGreen" />
+                        <Rectangle x:Name="SizeSeparator" Width="1" Height="18" Fill="#475569" Margin="8,0"
+                                   Visibility="Collapsed" />
+                        <StackPanel x:Name="BrushSizePanel" Orientation="Horizontal" VerticalAlignment="Center"
+                                    Visibility="Collapsed">
+                            <TextBlock Text="粗细" Foreground="#94A3B8" FontSize="12" VerticalAlignment="Center"
+                                       Margin="0,0,6,0" />
+                            <Border x:Name="SizeSmall" Width="22" Height="22" CornerRadius="11" Background="#26344A"
+                                    Margin="3,0" BorderThickness="2" BorderBrush="Transparent" Cursor="Hand"
+                                    ToolTip="细" MouseLeftButtonDown="OnSizeSmall">
+                                <Ellipse Width="6" Height="6" Fill="#F8FAFC"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <Border x:Name="SizeMedium" Width="22" Height="22" CornerRadius="11" Background="#26344A"
+                                    Margin="3,0" BorderThickness="2" BorderBrush="Transparent" Cursor="Hand"
+                                    ToolTip="中" MouseLeftButtonDown="OnSizeMedium">
+                                <Ellipse Width="10" Height="10" Fill="#F8FAFC"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <Border x:Name="SizeLarge" Width="22" Height="22" CornerRadius="11" Background="#26344A"
+                                    Margin="3,0" BorderThickness="2" BorderBrush="Transparent" Cursor="Hand"
+                                    ToolTip="粗" MouseLeftButtonDown="OnSizeLarge">
+                                <Ellipse Width="14" Height="14" Fill="#F8FAFC"
+                                         HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                        </StackPanel>
                     </WrapPanel>
                     <WrapPanel x:Name="ActionRow" Margin="0,4,0,0">
                         <Button x:Name="OcrButton" Content="取字" ToolTip="识别选区里的文字，离线 OCR（Ctrl+E）"
