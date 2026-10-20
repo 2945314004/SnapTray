@@ -1,6 +1,5 @@
 using System;
 using System.IO;
-using System.Reflection;
 using Microsoft.Win32;
 
 namespace SnapTray.Services;
@@ -38,8 +37,10 @@ public sealed class StartupService
         // 所有路径都加双引号，避免空格让 Windows 把程序路径误拆成参数。
         if (string.Equals(Path.GetFileNameWithoutExtension(executable), "dotnet", StringComparison.OrdinalIgnoreCase))
         {
-            string assembly = Assembly.GetEntryAssembly()?.Location ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(assembly))
+            // 只有通过 `dotnet SnapTray.dll` 启动才会走到这里（单文件发布时 ProcessPath 就是 exe）。
+            // 不能用 Assembly.Location：单文件应用里它恒为空（IL3000），AppContext.BaseDirectory 才可靠。
+            string assembly = Path.Combine(AppContext.BaseDirectory, "SnapTray.dll");
+            if (!File.Exists(assembly))
                 throw new InvalidOperationException("无法确定程序集路径，请通过 SnapTray.exe 启动后重试。");
             return $"\"{executable}\" \"{assembly}\"";
         }
