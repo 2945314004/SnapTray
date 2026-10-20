@@ -18,12 +18,17 @@ Windows 托盘截图 + 桌面贴图工具，C# / WPF / .NET 8。启动后常驻�
 
 ## 直接下载（无需编译）
 
-**[SnapTray-1.0.0-win-x64.zip](https://github.com/2945314004/SnapTray/releases/download/v1.0.0/SnapTray-1.0.0-win-x64.zip)** · 58 MiB
+**[SnapTray-1.0.1-win-x64.zip](https://github.com/2945314004/SnapTray/releases/download/v1.0.1/SnapTray-1.0.1-win-x64.zip)** · 58 MiB
 
 解压后双击 `SnapTray.exe` 就能用。自包含单文件，**不需要安装 .NET 运行时**；Windows 10 1809+ / Windows 11，x64。
 exe 未做代码签名，首次运行会弹 SmartScreen 蓝色提示：点「更多信息」→「仍要运行」。
 
 完整的版本列表见 [Releases](https://github.com/2945314004/SnapTray/releases)。
+
+> **开机自启是完全静默的**：注册表里写的是 `"…\SnapTray.exe" --startup`，程序本身是 GUI 子系统，
+> 登录时不会出现任何控制台窗口、也不会弹对话框（快捷键被占用之类的提示只走托盘气泡）。
+> 如果登录时仍看到黑框，那不是本程序——它启动时的子进程数为 0，可用
+> `tools/check-autostart.ps1` 列出全部自启项并标出哪些是控制台程序。
 
 ## 一、环境检查结果
 
@@ -89,9 +94,12 @@ dotnet publish src/SnapTray -c Release -r win-x64 --self-contained true `
 
 托盘图标：双击 = 区域截图；右键菜单 = 区域截图 / 全屏截图 / 打开保存目录 / 设置 / 退出。
 
-设置项：开机自启（写 `HKCU\...\CurrentVersion\Run`，路径整体加引号）、自定义快捷键（Alt/Ctrl/Shift +
+设置项：开机自启（写 `HKCU\...\CurrentVersion\Run`，路径整体加引号并带 `--startup`）、自定义快捷键（Alt/Ctrl/Shift +
 任意主键，应用后立即生效）、默认保存目录。配置持久化在 `%AppData%\SnapTray\settings.json`（原子替换写入，
 JSON 损坏时自动备份为 `settings.corrupt-*.json` 并回退默认值）。
+
+自启项每次启动都会自检：路径对不上（程序搬家、或旧版本写入过 `dotnet.exe` 形式）就改写成当前 exe——
+后者正是登录时闪控制台的典型原因，代码里已彻底禁止生成控制台宿主命令行。
 
 ## 四、实现要点
 

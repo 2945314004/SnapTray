@@ -46,6 +46,8 @@ public partial class App : Application
         bool wantCapture = HasArgument(e.Args, "--capture");
         bool wantFullScreen = HasArgument(e.Args, "--fullscreen");
         bool wantSettings = HasArgument(e.Args, "--settings");
+        // 登录自启时不弹任何模态框：出错写日志、提示走托盘气泡。
+        bool isStartupLaunch = HasArgument(e.Args, StartupService.StartupArgument);
         // 同一登录会话仅保留一个托盘进程，避免第二次启动抢占自己的热键。
         _instanceMutex = new Mutex(true, @"Local\SnapTray.SingleInstance", out _ownsMutex);
         if (!_ownsMutex)
@@ -66,6 +68,14 @@ public partial class App : Application
             _settings = _settingsService.Load();
             // 以注册表的实际状态展示开机自启，不在启动时擅自写入 Run 键。
             _settings.StartWithWindows = _startupService.IsEnabled();
+            if (_settings.StartWithWindows)
+            {
+                // 仅在已启用时修复：把失效路径或旧版本写入的 dotnet.exe 形式改成当前 exe，
+                // 后者的效果就是用户看到的"登录时闪黑框"。修复失败不影响本次启动。
+                try { _startupService.RepairRegistrationIfNeeded(); }
+                catch (Exception ex) when (ex is UnauthorizedAccessException or System.Security.SecurityException or IOException)
+                { /* 留待用户在设置里重新开启自启 */ }
+            }
             StartSignalListener();
             _tray = new TrayIconManager(Dispatcher);
             _tray.CaptureRequested += (_, _) => BeginCapture();
@@ -76,11 +86,15 @@ public partial class App : Application
             CreateHotkeyManager();
             if (!_hotkeys!.TryRegister(_settings.Hotkey, out string? error))
             {
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    MessageBox.Show($"{error}\n仍可双击托盘图标截图，请在设置中更换快捷键。", "轻截 · 快捷键注册失败", MessageBoxButton.OK, MessageBoxImage.Warning);
-                    OpenSettings();
-                }));
+                if (isStartupLaunch)
+                    // 开机自启：不弹模态框打断用户，气泡提示即可，用户可稍后去设置里换键。
+                    _tray.Notify("快捷键注册失败", $"{error}\n右键托盘图标 → 设置，可更换组合。", true);
+                else
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        MessageBox.Show($"{error}\n仍可双击托盘图标截图，请在设置中更换快捷键。", "轻截 · 快捷键注册失败", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        OpenSettings();
+                    }));
             }
             else if (wantSettings)
                 Dispatcher.BeginInvoke(new Action(OpenSettings));
@@ -88,8 +102,8 @@ public partial class App : Application
                 Dispatcher.BeginInvoke(new Action(() => BeginCapture(true)));
             else if (wantCapture)
                 Dispatcher.BeginInvoke(new Action(() => BeginCapture()));
-            else if (!_settingsService.Existed)
-                // 仅首次运行提示一次；日常开机启动静默驻留托盘，不弹气泡。
+            else if (!isStartupLaunch && !_settingsService.Existed)
+                // 仅首次手动运行提示一次；登录自启全程静默，只留托盘图标。
                 _tray.Notify("轻截已就绪", $"按 {_settings.Hotkey} 截图，或双击托盘图标。右键可打开设置。");
 
             if (_settingsService.LastLoadWarning is { Length: > 0 } warning)
@@ -97,9 +111,26 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"轻截启动失败：\n{ex.Message}", "轻截", MessageBoxButton.OK, MessageBoxImage.Error);
+            // 启动失败时不要用模态框卡住登录过程：写日志，手动启动时才弹框。
+            LogStartupFailure(ex);
+            if (!isStartupLaunch)
+                MessageBox.Show($"轻截启动失败：\n{ex.Message}", "轻截", MessageBoxButton.OK, MessageBoxImage.Error);
             Quit();
         }
+    }
+
+    private static void LogStartupFailure(Exception ex)
+    {
+        try
+        {
+            string directory = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "SnapTray");
+            Directory.CreateDirectory(directory);
+            File.AppendAllText(Path.Combine(directory, "startup-error.log"),
+                $"[{DateTime.Now:yyyy-MM-dd HH:mm:ss}] {ex}{Environment.NewLine}{Environment.NewLine}");
+        }
+        catch (Exception logError) when (logError is IOException or UnauthorizedAccessException)
+        { /* 日志写不进去也不能影响退出流程 */ }
     }
 
     private static bool HasArgument(string[] args, string name)

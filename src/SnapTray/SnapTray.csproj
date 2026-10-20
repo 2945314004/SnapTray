@@ -11,7 +11,7 @@
     <ApplicationIcon>Assets\SnapTray.ico</ApplicationIcon>
     <AssemblyName>SnapTray</AssemblyName>
     <RootNamespace>SnapTray</RootNamespace>
-    <Version>1.0.0</Version>
+    <Version>1.0.1</Version>
     <Description>轻截 — 托盘截图与桌面贴图工具</Description>
     <!--
       WFAC010 要求把 DPI 设置从清单搬到 ApplicationHighDpiMode。这条规则只对 WinForms 窗体有意义，
