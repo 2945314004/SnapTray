@@ -16,6 +16,15 @@ Windows 托盘截图 + 桌面贴图工具，C# / WPF / .NET 8。启动后常驻�
 └──────────────────────────────────────────────────────────────────┘
 ```
 
+## 直接下载（无需编译）
+
+**[SnapTray-1.0.0-win-x64.zip](https://github.com/2945314004/SnapTray/releases/download/v1.0.0/SnapTray-1.0.0-win-x64.zip)** · 58 MiB
+
+解压后双击 `SnapTray.exe` 就能用。自包含单文件，**不需要安装 .NET 运行时**；Windows 10 1809+ / Windows 11，x64。
+exe 未做代码签名，首次运行会弹 SmartScreen 蓝色提示：点「更多信息」→「仍要运行」。
+
+完整的版本列表见 [Releases](https://github.com/2945314004/SnapTray/releases)。
+
 ## 一、环境检查结果
 
 本机已确认（`dotnet --list-sdks`）：**8.0.426** 与 9.0.313，`global.json` 锁定 8.0.426（`rollForward: latestPatch`）。
